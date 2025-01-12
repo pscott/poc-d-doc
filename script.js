@@ -18,7 +18,13 @@ async function startCamera() {
         video.srcObject = stream;
         video.setAttribute("playsinline", true);
         
-        codeReader = new ZXing.BrowserDatamatrixCodeReader();
+        // Configure ZXing reader with hints to preserve special characters
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.CHARACTER_SET, "UTF-8");
+        hints.set(ZXing.DecodeHintType.ASSUME_GS1, false);
+        hints.set(ZXing.DecodeHintType.FORCE_C40, false);
+
+        codeReader = new ZXing.BrowserDatamatrixCodeReader(hints);
         const parser = new TwoDDocParser();
         
         await codeReader.decodeFromVideoDevice(
@@ -26,33 +32,45 @@ async function startCamera() {
             'video',
             (result, err) => {
                 if (result) {
-                    console.log("Found code:", result.getText());
+                    const rawData = result.getText();
+                    console.log("Found code:", rawData);
                     targetingBox.classList.add('detected');
                     
                     try {
                         // Parse the 2D-DOC data
-                        const parsedData = parser.parse(result.getText());
+                        const parsedData = parser.parse(rawData);
+                        
+                        // Log detailed parsing information
+                        console.log("Message zone data:", parsedData.messageData);
+                        console.log("Parsed fields:", Object.entries(parsedData.fields).map(([id, field]) => 
+                            `${id} (${field.name}): "${field.value}"`
+                        ));
                         
                         // Display the results
                         output.innerHTML = `
                             <h2>2D-DOC Parse Results</h2>
                             
+                            <h3>Document Type</h3>
+                            <ul>
+                                <li>${parsedData.docType.name || 'Unknown'}</li>
+                            </ul>
+                            
                             <h3>Header Information</h3>
                             <ul>
-                                <li>Format: ${parsedData.header.format}</li>
-                                <li>Country: ${parsedData.header.country}</li>
-                                <li>Issuer: ${parsedData.header.issuer}</li>
+                                <li>Version: ${parsedData.version}</li>
+                                <li>Country: ${parsedData.country}</li>
+                                <li>Issuer: ${parsedData.perimeter}</li>
                             </ul>
 
-                            <h3>Fields</h3>
+                            <h3>Document Information</h3>
                             <ul>
-                                ${Object.entries(parsedData.fields)
-                                    .map(([key, value]) => `<li><strong>${key}:</strong> ${value}</li>`)
+                                ${Object.values(parsedData.fields)
+                                    .map(field => `<li><strong>${field.name}:</strong> ${field.value}</li>`)
                                     .join('')}
                             </ul>
 
                             <h3>Signature</h3>
-                            <div class="signature">${parsedData.signature}</div>
+                            <div class="signature">${parsedData.signature || 'Not available'}</div>
                         `;
                     } catch (error) {
                         console.error('Error parsing 2D-DOC:', error);
@@ -61,12 +79,10 @@ async function startCamera() {
                         `;
                     }
                     
-                    // Reset the border color after 1 second
                     setTimeout(() => {
                         targetingBox.classList.remove('detected');
                     }, 1000);
                 }
-                // Only log critical errors
                 if (err && !(err instanceof ZXing.NotFoundException)) {
                     targetingBox.classList.remove('detected');
                 }
