@@ -1,19 +1,9 @@
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat, NotFoundException } from '@zxing/library';
+import { TwoDDocParser } from './parser.js';
 
-let video = document.getElementById('video');
-let canvas = document.getElementById('canvas');
-let ctx = canvas.getContext('2d');
-let output = document.getElementById('output');
-let targetingBox = document.getElementById('targeting-box');
-
-const hints = new Map();
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.DATA_MATRIX,
-    BarcodeFormat.QR_CODE
-]);
-hints.set(DecodeHintType.TRY_HARDER, true);
-
-const codeReader = new BrowserMultiFormatReader(hints);
+let codeReader;
+const video = document.getElementById('video');
+const output = document.getElementById('output');
+const targetingBox = document.getElementById('targeting-box');
 
 async function startCamera() {
     try {
@@ -28,27 +18,56 @@ async function startCamera() {
         video.srcObject = stream;
         video.setAttribute("playsinline", true);
         
+        codeReader = new ZXing.BrowserDatamatrixCodeReader();
+        const parser = new TwoDDocParser();
+        
         await codeReader.decodeFromVideoDevice(
             undefined, 
             'video',
             (result, err) => {
                 if (result) {
                     console.log("Found code:", result.getText());
-                    console.log("Format:", result.getBarcodeFormat());
                     targetingBox.classList.add('detected');
-                    output.innerHTML = `
-                        <p>Code détecté!</p>
-                        <p>Format: ${result.getBarcodeFormat()}</p>
-                        <pre>${result.getText()}</pre>
-                    `;
+                    
+                    try {
+                        // Parse the 2D-DOC data
+                        const parsedData = parser.parse(result.getText());
+                        
+                        // Display the results
+                        output.innerHTML = `
+                            <h2>2D-DOC Parse Results</h2>
+                            
+                            <h3>Header Information</h3>
+                            <ul>
+                                <li>Format: ${parsedData.header.format}</li>
+                                <li>Country: ${parsedData.header.country}</li>
+                                <li>Issuer: ${parsedData.header.issuer}</li>
+                            </ul>
+
+                            <h3>Fields</h3>
+                            <ul>
+                                ${Object.entries(parsedData.fields)
+                                    .map(([key, value]) => `<li><strong>${key}:</strong> ${value}</li>`)
+                                    .join('')}
+                            </ul>
+
+                            <h3>Signature</h3>
+                            <div class="signature">${parsedData.signature}</div>
+                        `;
+                    } catch (error) {
+                        console.error('Error parsing 2D-DOC:', error);
+                        output.innerHTML = `
+                            <div class="error">Error parsing 2D-DOC: ${error.message}</div>
+                        `;
+                    }
                     
                     // Reset the border color after 1 second
                     setTimeout(() => {
                         targetingBox.classList.remove('detected');
                     }, 1000);
                 }
-                if (err && !(err instanceof NotFoundException)) {
-                    console.error("Error:", err);
+                // Only log critical errors
+                if (err && !(err instanceof ZXing.NotFoundException)) {
                     targetingBox.classList.remove('detected');
                 }
             }
