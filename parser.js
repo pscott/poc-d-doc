@@ -27,6 +27,7 @@ export class TwoDDocParser {
             
             // Parse message zone according to version and encoding
             const message = this.parseMessageZone(messageData, header);
+            console.log("Message:", message);
 
             // Build the response object that matches the expected interface
             return {
@@ -163,61 +164,47 @@ export class TwoDDocParser {
 
         // Field specifications - just the rules for each field type
         const fieldSpecs = {
-            '43': { 
-                name: 'Nombre de parts',
-                type: 'variable',
-                maxLength: 5
-            },
-            '44': { 
-                name: 'Référence de l\'avis d\'impôt',
-                type: 'fixed',
-                length: 13
-            },
-            '45': { 
-                name: 'Année fiscale',
-                type: 'fixed',
-                length: 4
-            },
-            '46': { 
-                name: 'Nom du Déclarant 1',
-                type: 'variable',
-                maxLength: 38
-            },
-            '4A': { 
-                name: 'Date limite de paiement',
-                type: 'fixed',
-                length: 8
-            },
-            '47': { 
-                name: 'Numéro fiscal du Déclarant 1',
-                type: 'fixed',
-                length: 13
-            },
-            '41': { 
-                name: 'Revenu fiscal de référence',
-                type: 'variable',
-                maxLength: 12
-            },
-            '48': { 
-                name: 'Nom du Déclarant 2',
-                type: 'variable',
-                maxLength: 38
-            },
-            '49': { 
-                name: 'Numéro fiscal du Déclarant 2',
-                type: 'fixed',
-                length: 13
-            },
-            '4W': { 
-                name: 'Montant restant à payer',
-                type: 'variable',
-                maxLength: 10
-            },
-            '4X': { 
-                name: 'Montant prélevé à la source',
-                type: 'variable',
-                maxLength: 10
-            }
+            // Type 01 (Justificatif de Domicile) - Mandatory fields
+            '10': { name: 'Ligne 1 adresse postale bénéficiaire', type: 'variable', maxLength: 38 },
+            '11': { name: 'Qualité/titre du bénéficiaire', type: 'variable', maxLength: 38 },
+            '12': { name: 'Prénom du bénéficiaire', type: 'variable', maxLength: 38 },
+            '13': { name: 'Nom du bénéficiaire', type: 'variable', maxLength: 38 },
+            '20': { name: 'Ligne 2 adresse point de service', type: 'variable', maxLength: 38 },
+            '22': { name: 'Numéro et nom de voie bénéficiaire', type: 'variable', maxLength: 38 },
+            '24': { name: 'Code postal point de service', type: 'fixed', length: 5 },
+            '26': { name: 'Pays point de service', type: 'fixed', length: 2 },
+
+            // Type 01 (Justificatif de Domicile) - Optional fields
+            '15': { name: 'Qualité/titre destinataire facture', type: 'variable', maxLength: 38 },
+            '16': { name: 'Prénom destinataire facture', type: 'variable', maxLength: 38 },
+            '17': { name: 'Nom destinataire facture', type: 'variable', maxLength: 38 },
+            '18': { name: 'Numéro de facture', type: 'variable'},
+            '1A': { name: 'Numéro de contrat', type: 'variable', maxLength: 50 },
+            '1B': { name: 'Identifiant souscripteur', type: 'variable', maxLength: 50 },
+            '1C': { name: 'Date d\'effet du contrat', type: 'fixed', length: 8 },
+            '1D': { name: 'Montant TTC', type: 'variable', maxLength: 16 },
+            '1F': { name: 'Téléphone destinataire', type: 'variable', maxLength: 30 },
+            '25': { name: 'Localité point de service', type: 'variable', maxLength: 32 },
+            '27': { name: 'Ligne 2 adresse destinataire', type: 'variable', maxLength: 38 },
+            '28': { name: 'Ligne 3 adresse destinataire', type: 'variable', maxLength: 38 },
+            '29': { name: 'Ligne 4 adresse destinataire', type: 'variable', maxLength: 38 },
+            '2A': { name: 'Ligne 5 adresse destinataire', type: 'variable', maxLength: 38 },
+            '2B': { name: 'Code postal destinataire', type: 'fixed', length: 5 },
+            '2C': { name: 'Localité destinataire', type: 'variable', maxLength: 32 },
+            '2D': { name: 'Pays destinataire', type: 'fixed', length: 2 },
+
+            // Type 04 (Tax Notice) fields
+            '43': { name: 'Nombre de parts', type: 'variable', maxLength: 5 },
+            '44': { name: 'Référence de l\'avis d\'impôt', type: 'fixed', length: 13 },
+            '45': { name: 'Année fiscale', type: 'fixed', length: 4 },
+            '46': { name: 'Nom du Déclarant 1', type: 'variable', maxLength: 38 },
+            '4A': { name: 'Date limite de paiement', type: 'fixed', length: 8 },
+            '47': { name: 'Numéro fiscal du Déclarant 1', type: 'fixed', length: 13 },
+            '41': { name: 'Revenu fiscal de référence', type: 'variable', maxLength: 12 },
+            '48': { name: 'Nom du Déclarant 2', type: 'variable', maxLength: 38 },
+            '49': { name: 'Numéro fiscal du Déclarant 2', type: 'fixed', length: 13 },
+            '4W': { name: 'Montant restant à payer', type: 'variable', maxLength: 10 },
+            '4X': { name: 'Montant prélevé à la source', type: 'variable', maxLength: 10 }
         };
 
         while (position < data.length - 1) {
@@ -227,8 +214,9 @@ export class TwoDDocParser {
                 console.log("Found signature marker at position", position);
                 break;
             }
+            console.log("SCOTT Field ID:", fieldId);
 
-            if (fieldId.startsWith('4') && fieldSpecs[fieldId]) {
+            if (fieldSpecs[fieldId]) {
                 if (seenFieldIds.has(fieldId)) {
                     console.warn(`Warning: Duplicate field ID ${fieldId} found at position ${position}, skipping...`);
                     position++;
@@ -249,9 +237,11 @@ export class TwoDDocParser {
                     // For variable length fields, read until separator or maxLength
                     let endPos = position;
                     while (endPos < data.length && 
-                           endPos - position < spec.maxLength && 
                            data[endPos] !== this.GS && 
                            data[endPos] !== this.RS) {
+                           if (spec.maxLength && (endPos - position >= spec.maxLength)) {
+                                break;
+                            }
                         endPos++;
                     }
 
@@ -273,6 +263,7 @@ export class TwoDDocParser {
                     seenFieldIds.add(fieldId);
                 }
             } else {
+                console.log("Field ID not found:", fieldId);
                 position++;
             }
         }
@@ -280,57 +271,65 @@ export class TwoDDocParser {
         return fields;
     }
 
-    isValidFieldValue(value, fieldId) {
-        // Helper to validate if a value matches the expected format for a field
-        switch (fieldId) {
-            case '41': // Revenu fiscal de référence
-                return /^[0-9,.-]*$/.test(value);
-            case '43': // Nombre de parts
-                return /^[0-9]{1,5}$/.test(value);
-            case '44': // Référence de l'avis d'impôt
-                return /^[A-Z0-9]{13}$/.test(value);
-            case '45': // Année fiscale
-                return /^[0-9]{4}$/.test(value);
-            case '4A': // Date limite de paiement
-                return /^[0-9]{8}$/.test(value);
-            case '47': // Numéro fiscal du Déclarant 1
-            case '49': // Numéro fiscal du Déclarant 2
-                return /^[0-9]{13}$/.test(value);
-            case '4W': // Montant restant à payer
-            case '4X': // Montant prélevé à la source
-                return /^[0-9,.-]*$/.test(value);
-            default:
-                return true; // For other fields, accept any value
-        }
-    }
-
     cleanFieldValue(value, fieldId) {
-        // Store the last field ID for formatting purposes
         this.lastFieldId = fieldId;
-
-        // Remove any control characters except comma for decimal values
         value = value.replace(/[\x00-\x1C\x1E-\x1F]/g, '');
 
+        // TODO: remove the cleaning here, add some data on the fields and do this *per field*
         switch (fieldId) {
-            case '43': // Nombre de parts (1-5 chars)
+            // Type 01 fields
+            case '24':
+            case '2B':
                 return value.replace(/[^0-9]/g, '').slice(0, 5);
-            case '44': // Référence de l'avis d'impôt (13 chars)
-                return value.replace(/[^A-Z0-9]/g, '').slice(0, 13);
-            case '45': // Année fiscale (4 chars)
-                return value.replace(/[^0-9]/g, '').slice(0, 4);
-            case '41': // Revenu fiscal de référence
-            case '4W': // Montant restant à payer
-            case '4X': // Montant prélevé à la source
-                // Preserve decimal comma and negative sign
-                return value.replace(/[^0-9,-]/g, '');
-            case '47': // Numéro fiscal du Déclarant 1
-            case '49': // Numéro fiscal du Déclarant 2
-                return value.replace(/[^0-9]/g, '').slice(0, 13);
-            case '46': // Nom du Déclarant 1
-            case '48': // Nom du Déclarant 2
-                return value.replace(/[^A-Z0-9 ]/g, '').trim();
-            case '4A': // Date limite de paiement
+            case '26':
+            case '2D':
+                return value.slice(0, 2).toUpperCase();
+            case '1C':
                 return value.replace(/[^0-9]/g, '').slice(0, 8);
+            case '1D':
+                return value.replace(/[^0-9,-]/g, '');
+            case '1F':
+                return value.replace(/[^0-9]/g, '');
+            case '10':
+            case '11':
+            case '12':
+            case '13':
+            case '15':
+            case '16':
+            case '17':
+            case '20':
+            case '22':
+            case '25':
+            case '27':
+            case '28':
+            case '29':
+            case '2A':
+            case '2C':
+                return value.replace(/[^A-Z0-9 /]/g, '').trim();
+            case '1A':
+            case '1B':
+                return value.replace(/[^A-Z0-9]/g, '').trim();
+
+            // Type 04 fields
+            case '43':
+                return value.replace(/[^0-9]/g, '').slice(0, 5);
+            case '44':
+                return value.replace(/[^A-Z0-9]/g, '').slice(0, 13);
+            case '45':
+                return value.replace(/[^0-9]/g, '').slice(0, 4);
+            case '41':
+            case '4W':
+            case '4X':
+                return value.replace(/[^0-9,-]/g, '');
+            case '47':
+            case '49':
+                return value.replace(/[^0-9]/g, '').slice(0, 13);
+            case '46':
+            case '48':
+                return value.replace(/[^A-Z0-9 ]/g, '').trim();
+            case '4A':
+                return value.replace(/[^0-9]/g, '').slice(0, 8);
+            
             default:
                 return value.trim();
         }
@@ -342,6 +341,7 @@ export class TwoDDocParser {
         for (const field of message) {
             // Store the field ID before getting field info and formatting
             this.lastFieldId = field.fieldId;
+            console.log("Field ID:", field.fieldId);
             
             const fieldInfo = this.getFieldInfo(field.fieldId, header);
             if (fieldInfo) {
@@ -366,14 +366,39 @@ export class TwoDDocParser {
             '02': { name: 'Date d\'émission', type: 'date' },
             '03': { name: 'Date de signature', type: 'date' },
             
-            // Tax Notice (Type 04) fields - Mandatory
+            // Type 01 (Justificatif de Domicile) fields
+            '10': { name: 'Ligne 1 adresse postale bénéficiaire', type: 'string' },
+            '11': { name: 'Qualité/titre du bénéficiaire', type: 'string' },
+            '12': { name: 'Prénom du bénéficiaire', type: 'string' },
+            '13': { name: 'Nom du bénéficiaire', type: 'string' },
+            '20': { name: 'Ligne 2 adresse point de service', type: 'string' },
+            '22': { name: 'Numéro et nom de voie bénéficiaire', type: 'string' },
+            '24': { name: 'Code postal point de service', type: 'string' },
+            '26': { name: 'Pays point de service', type: 'string' },
+            '15': { name: 'Qualité/titre destinataire facture', type: 'string' },
+            '16': { name: 'Prénom destinataire facture', type: 'string' },
+            '17': { name: 'Nom destinataire facture', type: 'string' },
+            '18': { name: 'Numéro de facture', type: 'string' },
+            '1A': { name: 'Numéro de contrat', type: 'string' },
+            '1B': { name: 'Identifiant souscripteur', type: 'string' },
+            '1C': { name: 'Date d\'effet du contrat', type: 'formatted_date' },
+            '1D': { name: 'Montant TTC', type: 'amount' },
+            '1F': { name: 'Téléphone destinataire', type: 'phone' },
+            '25': { name: 'Localité point de service', type: 'string' },
+            '27': { name: 'Ligne 2 adresse destinataire', type: 'string' },
+            '28': { name: 'Ligne 3 adresse destinataire', type: 'string' },
+            '29': { name: 'Ligne 4 adresse destinataire', type: 'string' },
+            '2A': { name: 'Ligne 5 adresse destinataire', type: 'string' },
+            '2B': { name: 'Code postal destinataire', type: 'string' },
+            '2C': { name: 'Localité destinataire', type: 'string' },
+            '2D': { name: 'Pays destinataire', type: 'string' },
+            
+            // Type 04 (Tax Notice) fields
             '43': { name: 'Nombre de parts', type: 'integer' },
             '44': { name: 'Référence de l\'avis d\'impôt', type: 'string' },
             '45': { name: 'Année fiscale', type: 'year' },
             '46': { name: 'Nom du Déclarant 1', type: 'string' },
             '4A': { name: 'Date limite de paiement', type: 'formatted_date' },
-            
-            // Tax Notice (Type 04) fields - Optional
             '41': { name: 'Revenu fiscal de référence', type: 'amount' },
             '47': { name: 'Numéro fiscal du Déclarant 1', type: 'string' },
             '48': { name: 'Nom du Déclarant 2', type: 'string' },
@@ -412,6 +437,7 @@ export class TwoDDocParser {
                 return `${value.trim()} €`;
             case 'string':
                 // Special formatting for specific fields
+                // TODO: remove this
                 if (value.length === 13) {
                     if (this.lastFieldId === '44') {
                         // Format reference: XX XX XXXXXXX XX
@@ -481,6 +507,7 @@ export class TwoDDocParser {
     getDocumentType(perimeterId, docTypeId) {
         const docTypes = {
             '01': { // ANTS Perimeter
+                '01': { name: 'Justificatif de Domicile', category: 'Justificatif' },
                 '04': { name: 'Avis d\'impôt sur les Revenus', category: 'IMPOTS' },
                 // ... other ANTS document types ...
             },
