@@ -230,8 +230,17 @@ export class TwoDDocParser {
         this.lastFieldId = fieldId;
         value = value.replace(/[\x00-\x1C\x1E-\x1F]/g, '');
 
-        // TODO: remove the cleaning here, add some data on the fields and do this *per field*
         switch (fieldId) {
+            case '10':
+                // For field 10: only uppercase letters, numbers, spaces, and forward slashes
+                // First, convert to uppercase and remove any invalid characters
+                value = value.toUpperCase().replace(/[^A-Z0-9 /]/g, '');
+                // Ensure slashes have spaces around them for readability
+                value = value.replace(/\s*\/\s*/g, ' / ');
+                // Remove multiple consecutive spaces
+                value = value.replace(/\s+/g, ' ');
+                return value.trim();
+
             // Type 01 fields
             case '24':
             case '2B':
@@ -245,7 +254,6 @@ export class TwoDDocParser {
                 return value.replace(/[^0-9,-]/g, '');
             case '1F':
                 return value.replace(/[^0-9]/g, '');
-            case '10':
             case '11':
             case '12':
             case '13':
