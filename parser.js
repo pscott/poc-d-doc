@@ -1,3 +1,5 @@
+import { FIELD_DEFINITIONS } from './fields.js';
+
 export class TwoDDocParser {
   constructor() {
         // Constants for special characters and encoding
@@ -162,51 +164,6 @@ export class TwoDDocParser {
 
         console.log("Starting message zone parsing. Data:", data);
 
-        // Field specifications - just the rules for each field type
-        const fieldSpecs = {
-            // Type 01 (Justificatif de Domicile) - Mandatory fields
-            '10': { name: 'Ligne 1 adresse postale bénéficiaire', type: 'variable', maxLength: 38 },
-            '11': { name: 'Qualité/titre du bénéficiaire', type: 'variable', maxLength: 38 },
-            '12': { name: 'Prénom du bénéficiaire', type: 'variable', maxLength: 38 },
-            '13': { name: 'Nom du bénéficiaire', type: 'variable', maxLength: 38 },
-            '20': { name: 'Ligne 2 adresse point de service', type: 'variable', maxLength: 38 },
-            '22': { name: 'Numéro et nom de voie bénéficiaire', type: 'variable', maxLength: 38 },
-            '24': { name: 'Code postal point de service', type: 'fixed', length: 5 },
-            '26': { name: 'Pays point de service', type: 'fixed', length: 2 },
-
-            // Type 01 (Justificatif de Domicile) - Optional fields
-            '15': { name: 'Qualité/titre destinataire facture', type: 'variable', maxLength: 38 },
-            '16': { name: 'Prénom destinataire facture', type: 'variable', maxLength: 38 },
-            '17': { name: 'Nom destinataire facture', type: 'variable', maxLength: 38 },
-            '18': { name: 'Numéro de facture', type: 'variable'},
-            '1A': { name: 'Numéro de contrat', type: 'variable', maxLength: 50 },
-            '1B': { name: 'Identifiant souscripteur', type: 'variable', maxLength: 50 },
-            '1C': { name: 'Date d\'effet du contrat', type: 'fixed', length: 8 },
-            '1D': { name: 'Montant TTC', type: 'variable', maxLength: 16 },
-            '1F': { name: 'Téléphone destinataire', type: 'variable', maxLength: 30 },
-            '25': { name: 'Localité point de service', type: 'variable', maxLength: 32 },
-            '27': { name: 'Ligne 2 adresse destinataire', type: 'variable', maxLength: 38 },
-            '28': { name: 'Ligne 3 adresse destinataire', type: 'variable', maxLength: 38 },
-            '29': { name: 'Ligne 4 adresse destinataire', type: 'variable', maxLength: 38 },
-            '2A': { name: 'Ligne 5 adresse destinataire', type: 'variable', maxLength: 38 },
-            '2B': { name: 'Code postal destinataire', type: 'fixed', length: 5 },
-            '2C': { name: 'Localité destinataire', type: 'variable', maxLength: 32 },
-            '2D': { name: 'Pays destinataire', type: 'fixed', length: 2 },
-
-            // Type 04 (Tax Notice) fields
-            '43': { name: 'Nombre de parts', type: 'variable', maxLength: 5 },
-            '44': { name: 'Référence de l\'avis d\'impôt', type: 'fixed', length: 13 },
-            '45': { name: 'Année fiscale', type: 'fixed', length: 4 },
-            '46': { name: 'Nom du Déclarant 1', type: 'variable', maxLength: 38 },
-            '4A': { name: 'Date limite de paiement', type: 'fixed', length: 8 },
-            '47': { name: 'Numéro fiscal du Déclarant 1', type: 'fixed', length: 13 },
-            '41': { name: 'Revenu fiscal de référence', type: 'variable', maxLength: 12 },
-            '48': { name: 'Nom du Déclarant 2', type: 'variable', maxLength: 38 },
-            '49': { name: 'Numéro fiscal du Déclarant 2', type: 'fixed', length: 13 },
-            '4W': { name: 'Montant restant à payer', type: 'variable', maxLength: 10 },
-            '4X': { name: 'Montant prélevé à la source', type: 'variable', maxLength: 10 }
-        };
-
         while (position < data.length - 1) {
             const fieldId = data.substring(position, position + 2);
             
@@ -214,9 +171,8 @@ export class TwoDDocParser {
                 console.log("Found signature marker at position", position);
                 break;
             }
-            console.log("SCOTT Field ID:", fieldId);
 
-            if (fieldSpecs[fieldId]) {
+            if (FIELD_DEFINITIONS[fieldId]) {
                 if (seenFieldIds.has(fieldId)) {
                     console.warn(`Warning: Duplicate field ID ${fieldId} found at position ${position}, skipping...`);
                     position++;
@@ -226,20 +182,20 @@ export class TwoDDocParser {
                 position += 2; // Move past field ID
                 console.log(`Found field ${fieldId} at position ${position - 2}`);
 
-                const spec = fieldSpecs[fieldId];
+                const fieldDef = FIELD_DEFINITIONS[fieldId];
                 let value;
 
-                if (spec.type === 'fixed') {
+                if (fieldDef.lengthType === 'fixed') {
                     // For fixed length fields, just take the exact length
-                    value = data.substring(position, position + spec.length);
-                    position += spec.length;
+                    value = data.substring(position, position + fieldDef.length);
+                    position += fieldDef.length;
                 } else {
                     // For variable length fields, read until separator or maxLength
                     let endPos = position;
                     while (endPos < data.length && 
                            data[endPos] !== this.GS && 
                            data[endPos] !== this.RS) {
-                           if (spec.maxLength && (endPos - position >= spec.maxLength)) {
+                           if (fieldDef.maxLength && (endPos - position >= fieldDef.maxLength)) {
                                 break;
                             }
                         endPos++;
@@ -263,7 +219,6 @@ export class TwoDDocParser {
                     seenFieldIds.add(fieldId);
                 }
             } else {
-                console.log("Field ID not found:", fieldId);
                 position++;
             }
         }
@@ -359,55 +314,7 @@ export class TwoDDocParser {
     }
 
     getFieldInfo(fieldId, header) {
-        // Field definitions based on document type and perimeter
-        const fieldDefinitions = {
-            // Common fields
-            '01': { name: 'ID Document', type: 'string' },
-            '02': { name: 'Date d\'émission', type: 'date' },
-            '03': { name: 'Date de signature', type: 'date' },
-            
-            // Type 01 (Justificatif de Domicile) fields
-            '10': { name: 'Ligne 1 adresse postale bénéficiaire', type: 'string' },
-            '11': { name: 'Qualité/titre du bénéficiaire', type: 'string' },
-            '12': { name: 'Prénom du bénéficiaire', type: 'string' },
-            '13': { name: 'Nom du bénéficiaire', type: 'string' },
-            '20': { name: 'Ligne 2 adresse point de service', type: 'string' },
-            '22': { name: 'Numéro et nom de voie bénéficiaire', type: 'string' },
-            '24': { name: 'Code postal point de service', type: 'string' },
-            '26': { name: 'Pays point de service', type: 'string' },
-            '15': { name: 'Qualité/titre destinataire facture', type: 'string' },
-            '16': { name: 'Prénom destinataire facture', type: 'string' },
-            '17': { name: 'Nom destinataire facture', type: 'string' },
-            '18': { name: 'Numéro de facture', type: 'string' },
-            '1A': { name: 'Numéro de contrat', type: 'string' },
-            '1B': { name: 'Identifiant souscripteur', type: 'string' },
-            '1C': { name: 'Date d\'effet du contrat', type: 'formatted_date' },
-            '1D': { name: 'Montant TTC', type: 'amount' },
-            '1F': { name: 'Téléphone destinataire', type: 'phone' },
-            '25': { name: 'Localité point de service', type: 'string' },
-            '27': { name: 'Ligne 2 adresse destinataire', type: 'string' },
-            '28': { name: 'Ligne 3 adresse destinataire', type: 'string' },
-            '29': { name: 'Ligne 4 adresse destinataire', type: 'string' },
-            '2A': { name: 'Ligne 5 adresse destinataire', type: 'string' },
-            '2B': { name: 'Code postal destinataire', type: 'string' },
-            '2C': { name: 'Localité destinataire', type: 'string' },
-            '2D': { name: 'Pays destinataire', type: 'string' },
-            
-            // Type 04 (Tax Notice) fields
-            '43': { name: 'Nombre de parts', type: 'integer' },
-            '44': { name: 'Référence de l\'avis d\'impôt', type: 'string' },
-            '45': { name: 'Année fiscale', type: 'year' },
-            '46': { name: 'Nom du Déclarant 1', type: 'string' },
-            '4A': { name: 'Date limite de paiement', type: 'formatted_date' },
-            '41': { name: 'Revenu fiscal de référence', type: 'amount' },
-            '47': { name: 'Numéro fiscal du Déclarant 1', type: 'string' },
-            '48': { name: 'Nom du Déclarant 2', type: 'string' },
-            '49': { name: 'Numéro fiscal du Déclarant 2', type: 'string' },
-            '4W': { name: 'Montant restant à payer', type: 'amount' },
-            '4X': { name: 'Montant prélevé à la source', type: 'amount' }
-        };
-
-        return fieldDefinitions[fieldId];
+        return FIELD_DEFINITIONS[fieldId];
     }
 
     formatFieldValue(value, type, header) {
