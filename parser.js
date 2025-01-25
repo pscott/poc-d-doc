@@ -1,4 +1,5 @@
 import { FIELD_DEFINITIONS } from './fields.js';
+import { verifySignature } from './cert_utils.js';
 
 export class TwoDDocParser {
   constructor() {
@@ -18,7 +19,7 @@ export class TwoDDocParser {
         ];
     }
 
-    parse(rawData) {
+    async parse(rawData) {
         try {
             // Parse header first to determine version and encoding
             const header = this.parseHeader(rawData);
@@ -31,18 +32,60 @@ export class TwoDDocParser {
             const message = this.parseMessageZone(messageData, header);
             console.log("Message:", message);
 
+            // Parse fields from message
+            const parsedFields = this.parseFields(message, header);
+            console.log("Parsed fields before return:", parsedFields);
+
             // Build the response object that matches the expected interface
-            return {
+            const result = {
                 version: header.version,
                 country: header.countryId,
                 perimeter: header.caId,
                 docType: this.getDocumentType(header.perimeterId, header.docTypeId),
-                fields: this.parseFields(message, header),
+                fields: parsedFields || {}, // Ensure we always return an object
                 signature: signatureData,
+                signatureValid: false, // Will be updated after verification
                 annex: annexData ? this.parseMessageZone(annexData, header) : undefined,
-                messageData: messageData  // Expose the message data for debugging
+                messageData: messageData
             };
-    } catch (error) {
+
+            // Verify the signature
+            try {
+                result.signatureValid = await verifySignature({
+                    header: rawData.substring(0, header.headerLength),
+                    message: messageData,
+                    signature: signatureData,
+                    caId: header.caId,
+                    certId: header.certId || header.perimeterId
+                });
+                
+                // Add visual feedback for signature verification
+                const resultElement = document.getElementById('result');
+                if (resultElement) {
+                    const signatureStatus = document.createElement('div');
+                    signatureStatus.style.padding = '10px';
+                    signatureStatus.style.marginTop = '10px';
+                    signatureStatus.style.borderRadius = '5px';
+                    
+                    if (result.signatureValid) {
+                        signatureStatus.style.backgroundColor = '#dff0d8';
+                        signatureStatus.style.color = '#3c763d';
+                        signatureStatus.textContent = '✓ Signature verified successfully';
+                    } else {
+                        signatureStatus.style.backgroundColor = '#f2dede';
+                        signatureStatus.style.color = '#a94442';
+                        signatureStatus.textContent = '✗ Invalid signature';
+                    }
+                    
+                    resultElement.appendChild(signatureStatus);
+                }
+            } catch (error) {
+                console.error('Error verifying signature:', error);
+            }
+
+            console.log("Final result object:", result);
+            return result;
+        } catch (error) {
             console.error('Error parsing 2D-DOC:', error);
             throw new Error(`Failed to parse 2D-DOC: ${error.message}`);
         }
@@ -301,6 +344,11 @@ export class TwoDDocParser {
     parseFields(message, header) {
         const parsedFields = {};
         
+        if (!message || !Array.isArray(message)) {
+            console.error('Invalid message format:', message);
+            return {};
+        }
+        
         for (const field of message) {
             // Store the field ID before getting field info and formatting
             this.lastFieldId = field.fieldId;
@@ -318,6 +366,7 @@ export class TwoDDocParser {
             }
         }
 
+        console.log('Parsed fields:', parsedFields);
         return parsedFields;
     }
 

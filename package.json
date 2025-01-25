@@ -1,6 +1,7 @@
 {
   "name": "poc-2d-doc",
   "version": "1.0.0",
+  "description": "Proof of concept for parsing 2D-DOC codes",
   "main": "script.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,9 +12,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "type": "module",
   "dependencies": {
-    "@zxing/library": "^0.21.3"
+    "@zxing/library": "^0.21.3",
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1"
   },
   "devDependencies": {
     "vite": "^6.0.7"

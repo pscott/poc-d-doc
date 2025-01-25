@@ -1,0 +1,16 @@
+{
+  "name": "certificates-api",
+  "version": "1.0.0",
+  "description": "API server for 2D-DOC certificates",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1"
+  }
+}
