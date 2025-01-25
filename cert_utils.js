@@ -1,12 +1,40 @@
 const API_BASE_URL = 'http://localhost:3000/api';
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // ms
 
-// Add this mapping for EC curve names
+// Map EC curve names to Web Crypto API format
 const CURVE_NAME_MAP = {
     'prime256v1': 'P-256',
     'secp256r1': 'P-256',
     'secp384r1': 'P-384',
     'secp521r1': 'P-521'
 };
+
+// Base32 alphabet used in 2D-DOC
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+/**
+ * Retry a function with exponential backoff
+ * @template T
+ * @param {function(): Promise<T>} fn - Function to retry
+ * @param {number} maxRetries - Maximum number of retries
+ * @param {number} delay - Initial delay in milliseconds
+ * @returns {Promise<T>} - Result of the function
+ */
+async function retry(fn, maxRetries = MAX_RETRIES, delay = RETRY_DELAY) {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            if (i < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+            }
+        }
+    }
+    throw lastError;
+}
 
 /**
  * Get all certificates for a given provider name
@@ -74,23 +102,102 @@ export async function getValidCertificates() {
 }
 
 /**
- * Get certificate by CA ID and Certificate ID
- * @param {string} caId - The CA ID from the 2D-DOC header
- * @param {string} certId - The Certificate ID from the 2D-DOC header
- * @returns {Promise<Object>} Certificate details including the public key
+ * Get certificate for signature verification
+ * @param {string} caId - CA ID from 2D-DOC
+ * @param {string} certId - Certificate ID from 2D-DOC
+ * @returns {Promise<Object>} Certificate data
+ * @throws {Error} If certificate not found or API error
  */
 export async function getCertificateForVerification(caId, certId) {
-    try {
+    return retry(async () => {
         const response = await fetch(
             `${API_BASE_URL}/certificates/verification?caId=${encodeURIComponent(caId)}&certId=${encodeURIComponent(certId)}`
         );
+        
         if (!response.ok) {
-            if (response.status === 404) return null;
-            throw new Error('Failed to fetch certificate');
+            if (response.status === 404) {
+                throw new Error(`Certificate not found for CA ID: ${caId}, Cert ID: ${certId}`);
+            }
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
+        
         return await response.json();
+    });
+}
+
+/**
+ * Convert a base32 string to Uint8Array
+ * @param {string} base32 - Base32 encoded string
+ * @returns {Uint8Array} - Decoded bytes
+ */
+function base32ToUint8Array(base32) {
+    // Remove any padding characters
+    base32 = base32.replace(/=+$/, '');
+    
+    // Convert to uppercase and remove any non-base32 characters
+    base32 = base32.toUpperCase().replace(/[^A-Z2-7]/g, '');
+    
+    const length = base32.length;
+    const buffer = new Uint8Array(Math.floor(length * 5 / 8));
+    let bits = 0;
+    let value = 0;
+    let index = 0;
+
+    for (let i = 0; i < length; i++) {
+        value = (value << 5) | BASE32_ALPHABET.indexOf(base32[i]);
+        bits += 5;
+
+        if (bits >= 8) {
+            buffer[index++] = (value >>> (bits - 8)) & 255;
+            bits -= 8;
+        }
+    }
+
+    return buffer;
+}
+
+/**
+ * Verify a 2D-DOC signature
+ * @param {Object} params - Verification parameters
+ * @param {string} params.header - Header data
+ * @param {string} params.message - Message data
+ * @param {string} params.signature - Signature data
+ * @param {string} params.caId - CA ID
+ * @param {string} params.certId - Certificate ID
+ * @returns {Promise<boolean>} Whether signature is valid
+ */
+export async function verifySignature({ header, message, signature, caId, certId }) {
+    console.log('Starting signature verification...');
+    console.log('Header:', header);
+    console.log('Message:', message);
+    console.log('Signature:', signature);
+    console.log('CA ID:', caId);
+    console.log('Cert ID:', certId);
+
+    try {
+        const cert = await getCertificateForVerification(caId, certId);
+        if (!cert) {
+            throw new Error(`Certificate not found for ID: ${certId}`);
+        }
+
+        const publicKeyBytes = new Uint8Array(cert.public_key.data);
+        const signatureBytes = base32ToUint8Array(signature);
+        const dataToVerify = header + message;
+        const encoder = new TextEncoder();
+        const dataBytes = encoder.encode(dataToVerify);
+
+        const publicKey = await importPublicKey(publicKeyBytes, cert.key_type, cert.key_info);
+        return await crypto.subtle.verify(
+            {
+                name: 'ECDSA',
+                hash: { name: 'SHA-256' },
+            },
+            publicKey,
+            signatureBytes,
+            dataBytes
+        );
     } catch (error) {
-        console.error('Error fetching certificate for verification:', error);
+        console.error('Error during signature verification:', error);
         throw error;
     }
 }
@@ -157,92 +264,6 @@ function uint8ArrayToBase64(uint8Array) {
         binary += String.fromCharCode(uint8Array[i]);
     }
     return btoa(binary);
-}
-
-/**
- * Verify a 2D-DOC signature
- * @param {Object} params - Parameters for signature verification
- * @param {string} params.header - The header data
- * @param {string} params.message - The message zone data
- * @param {string} params.signature - The signature data
- * @param {string} params.caId - The CA ID from the header
- * @param {string} params.certId - The Certificate ID from the header
- * @returns {Promise<boolean>} Whether the signature is valid
- */
-export async function verifySignature({ header, message, signature, caId, certId }) {
-    console.log('Starting signature verification...');
-    console.log('Header:', header);
-    console.log('Message:', message);
-    console.log('Signature:', signature);
-    console.log('CA ID:', caId);
-    console.log('Cert ID:', certId);
-
-    try {
-        // Find the certificate
-        const cert = await getCertificateForVerification(caId, certId);
-        if (!cert) {
-            throw new Error(`Certificate not found for ID: ${certId}`);
-        }
-        console.log('Found certificate:', certId);
-        console.log('Raw certificate data:', cert);
-
-        // Convert public key to Uint8Array
-        const publicKeyBytes = new Uint8Array(cert.public_key.data);
-        console.log('Public key (base64):', uint8ArrayToBase64(publicKeyBytes));
-
-        // Convert signature from base32 to Uint8Array
-        const signatureBytes = base32ToUint8Array(signature);
-
-        // Create the data to verify (header + message)
-        const dataToVerify = header + message;
-        const encoder = new TextEncoder();
-        const dataBytes = encoder.encode(dataToVerify);
-
-        // Import the public key
-        const publicKey = await importPublicKey(publicKeyBytes, cert.key_type, cert.key_info);
-
-        // Verify the signature
-        const isValid = await crypto.subtle.verify(
-            {
-                name: 'ECDSA',
-                hash: { name: 'SHA-256' },
-            },
-            publicKey,
-            signatureBytes,
-            dataBytes
-        );
-
-        return isValid;
-    } catch (error) {
-        console.error('Error during signature verification:', error);
-        throw error;
-    }
-}
-
-// Helper function to convert base32 to Uint8Array
-function base32ToUint8Array(base32) {
-    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    let bits = 0;
-    let value = 0;
-    let output = [];
-
-    for (let i = 0; i < base32.length; i++) {
-        const c = base32.charAt(i);
-        const idx = ALPHABET.indexOf(c);
-        if (idx === -1) {
-            throw new Error('Invalid base32 character: ' + c);
-        }
-
-        value = (value << 5) | idx;
-        bits += 5;
-
-        if (bits >= 8) {
-            output.push((value >> (bits - 8)) & 255);
-            bits -= 8;
-        }
-    }
-
-    return new Uint8Array(output);
 }
 
 async function importPublicKey(keyBytes, keyType, keyInfo) {

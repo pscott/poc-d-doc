@@ -1,6 +1,10 @@
 import { FIELD_DEFINITIONS } from './fields.js';
 import { verifySignature } from './cert_utils.js';
 
+/**
+ * Parser for 2D-DOC documents
+ * Handles parsing and verification of French 2D-DOC documents
+ */
 export class TwoDDocParser {
   constructor() {
         // Constants for special characters and encoding
@@ -19,6 +23,11 @@ export class TwoDDocParser {
         ];
     }
 
+    /**
+     * Parse a 2D-DOC raw data string
+     * @param {string} rawData - The raw data from the 2D-DOC
+     * @returns {Promise<Object>} Parsed document data with verification status
+     */
     async parse(rawData) {
         try {
             // Parse header first to determine version and encoding
